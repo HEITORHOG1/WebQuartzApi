@@ -1,0 +1,6 @@
+@WebQuartzApi_HostAddress = http://localhost:5187
+
+GET {{WebQuartzApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
