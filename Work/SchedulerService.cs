@@ -5,20 +5,29 @@ using System.Collections.Specialized;
 
 namespace Work
 {
-    public static class SchedulerService
+    public class SchedulerService : ISchedulerService
     {
-        private static IScheduler _scheduler;
-        private static IConfiguration _configuration;
+        private IScheduler _scheduler;
+        private readonly IConfiguration _configuration;
+        private readonly ISchedulerFactory _schedulerFactory;
 
-        public static async Task<IScheduler> InitializeScheduler(IConfiguration configuration)
+        public SchedulerService(ISchedulerFactory schedulerFactory, IConfiguration configuration)
         {
+            _schedulerFactory = schedulerFactory;
             _configuration = configuration;
+        }
 
-            if (_scheduler != null && !_scheduler.IsShutdown)
+        public async Task<IScheduler> GetScheduler()
+        {
+            if (_scheduler == null || _scheduler.IsShutdown)
             {
-                return _scheduler;
+                await InitializeScheduler();
             }
+            return _scheduler;
+        }
 
+        public async Task InitializeScheduler()
+        {
             var props = new NameValueCollection
             {
                 ["quartz.serializer.type"] = _configuration["Quartz:SerializerType"],
@@ -38,12 +47,6 @@ namespace Work
             var factory = new StdSchedulerFactory(props);
             _scheduler = await factory.GetScheduler();
             await _scheduler.Start();
-            return _scheduler;
-        }
-
-        public static IScheduler GetScheduler()
-        {
-            return _scheduler;
         }
     }
 }

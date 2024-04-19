@@ -31,7 +31,7 @@
                 .WithOpenApi()
                 .WithDescription("Cria um novo trabalho.");
 
-            app.MapPost("/api/jobs/start", JobEndpoints.StartJob)
+            app.MapPost("/api/jobs/start", JobEndpoints.ResumeJob)
                 .WithTags("Jobs")
                 .WithOpenApi()
                 .WithDescription("Inicia um trabalho.");

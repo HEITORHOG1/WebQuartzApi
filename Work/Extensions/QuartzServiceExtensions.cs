@@ -1,7 +1,10 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Quartz;
+using System;
 
 namespace Work.Extensions
 {
@@ -26,10 +29,22 @@ namespace Work.Extensions
                 });
                 q.UseDefaultThreadPool(tp => tp.MaxConcurrency = configuration.GetValue<int>("Quartz:quartz.threadPool.threadCount"));
             });
-            // Adicione o serviço IScheduler ao contêiner de serviços
 
-            services.AddSingleton<IHostedService, QuartzHostedService>();
-            services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
+            // Configure o QuartzHostedService com opções apropriadas
+            services.AddSingleton<ISchedulerService, SchedulerService>();
+            services.AddSingleton<IHostedService, QuartzHostedService>((serviceProvider) => {
+                var lifetime = serviceProvider.GetRequiredService<IHostApplicationLifetime>();
+                var schedulerFactory = serviceProvider.GetRequiredService<ISchedulerFactory>();
+                var options = new QuartzHostedServiceOptions
+                {
+                    WaitForJobsToComplete = true
+                };
+                return new QuartzHostedService(lifetime, schedulerFactory, Options.Create(options));
+            });
+
+            // Configuração opcional para adicionar log detalhado
+            services.AddLogging(configure => configure.AddConsole())
+                .Configure<LoggerFilterOptions>(options => options.MinLevel = LogLevel.Debug);
         }
     }
 }

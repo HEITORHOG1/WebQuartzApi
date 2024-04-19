@@ -296,6 +296,19 @@ namespace WebQuartzApi.EndPoints
             }
             return Results.Ok(runningJobs);
         }
+        public static async Task<IResult> ResumeJob([FromServices] IScheduler scheduler, JobStateRequest request)
+        {
+            var jobKey = new JobKey(request.JobName, request.GroupName);
+            try
+            {
+                await scheduler.ResumeJob(jobKey);
+                return Results.Ok(new { Message = "Job resumed successfully." });
+            }
+            catch (SchedulerException ex)
+            {
+                return Results.Problem(ex.Message);
+            }
+        }
 
         private static async Task<string> GetCronExpressionFromDatabase(string jobName, string groupName)
         {
