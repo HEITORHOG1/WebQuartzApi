@@ -1,1 +1,41 @@
 # WebQuartzApi
+
+0 0/5 * * * ?
+
+
+SELECT TOP (1000) [SCHED_NAME]
+      ,[JOB_NAME]
+      ,[JOB_GROUP]
+      ,[DESCRIPTION]
+      ,[JOB_CLASS_NAME]
+      ,[IS_DURABLE]
+      ,[IS_NONCONCURRENT]
+      ,[IS_UPDATE_DATA]
+      ,[REQUESTS_RECOVERY]
+      ,[JOB_DATA]
+   FROM [Quartz_Works].[dbo].[QRTZ_JOB_DETAILS]
+
+SELECT TOP (1000) [SCHED_NAME]
+      ,[TRIGGER_NAME]
+      ,[TRIGGER_GROUP]
+      ,[CRON_EXPRESSION]
+      ,[TIME_ZONE_ID]
+  FROM [Quartz_Works].[dbo].[QRTZ_CRON_TRIGGERS]
+
+SELECT TOP (1000) [SCHED_NAME]
+      ,[TRIGGER_NAME]
+      ,[TRIGGER_GROUP]
+      ,[JOB_NAME]
+      ,[JOB_GROUP]
+      ,[DESCRIPTION]
+      ,[NEXT_FIRE_TIME]
+      ,[PREV_FIRE_TIME]
+      ,[PRIORITY]
+      ,[TRIGGER_STATE]
+      ,[TRIGGER_TYPE]
+      ,[START_TIME]
+      ,[END_TIME]
+      ,[CALENDAR_NAME]
+      ,[MISFIRE_INSTR]
+      ,[JOB_DATA]
+  FROM [Quartz_Works].[dbo].[QRTZ_TRIGGERS]
