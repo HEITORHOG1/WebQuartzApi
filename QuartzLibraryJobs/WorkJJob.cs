@@ -1,17 +1,17 @@
 ﻿using Microsoft.Extensions.Logging;
 using Quartz;
 
-namespace JobsQuatz.Jobs
+namespace Work
 {
     /// <summary>
     /// Classe que representa um job HTTP
     /// </summary>
     [DisallowConcurrentExecution]
-    public class HttpJob : IJob
+    public class WorkJJob : IJob
     {
-        private readonly ILogger<HttpJob> _logger;
+        private readonly ILogger<WorkJJob> _logger;
 
-        public HttpJob(ILogger<HttpJob> logger)
+        public WorkJJob(ILogger<WorkJJob> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }

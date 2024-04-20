@@ -34,6 +34,6 @@
 
 	</ItemGroup>
 	<ItemGroup>
-	  <ProjectReference Include="..\JobsQuatz\JobsQuatz.csproj" />
+	  <ProjectReference Include="..\QuartzLibraryJobs\QuartzLibraryJobs.csproj" />
 	</ItemGroup>
 </Project>

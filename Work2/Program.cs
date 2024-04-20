@@ -1,52 +1,81 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Quartz;
-using Quartz.Impl;
-using Quartz.Spi;
+using Quartz.Impl.Matchers;
 using Work2;
 
 internal class Program
 {
+    private static IConfiguration configuration;
+    private static ILogger logger;
+
     private static async Task Main(string[] args)
     {
-        var host = CreateHostBuilder(args).Build();
+        var host = Host.CreateDefaultBuilder(args)
+            .ConfigureAppConfiguration((hostingContext, config) =>
+            {
+                config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+            })
+            .ConfigureServices((hostContext, services) =>
+            {
+                configuration = hostContext.Configuration;
+                services.AddQuartzConfiguration(configuration);
+                services.AddSingleton<ISchedulerService, SchedulerService>();
+                services.AddLogging();
+            })
+            .Build();
 
-        // Inicializar o serviço do agendador Quartz
-        var schedulerService = host.Services.GetService<ISchedulerService>();
-        var scheduler = schedulerService.GetScheduler();
+        logger = host.Services.GetRequiredService<ILogger<Program>>();
 
-        // Disparar o job "ONE" do grupo "FPS"
-        await TriggerJob(scheduler, "ONE", "FPS");
+        // Inicia o host para começar a executar o serviço
+        await host.StartAsync();
 
-        // Iniciar o host
-        await host.RunAsync();
-    }
+        // Garante que o scheduler seja obtido e iniciado
+        var schedulerService = host.Services.GetRequiredService<ISchedulerService>();
+        var scheduler = await schedulerService.GetScheduler();
 
-    private static async Task TriggerJob(IScheduler scheduler, string jobName, string groupName)
-    {
-        var jobKey = new JobKey(jobName, groupName);
-        if (await scheduler.CheckExists(jobKey))
+        var jobKey = new JobKey("Work1", "Work1");
+
+        // Verifica se o job já existe
+        if (!await scheduler.CheckExists(jobKey))
         {
-            await scheduler.TriggerJob(jobKey);
-            Console.WriteLine($"Job '{jobName}' in group '{groupName}' was triggered successfully.");
+            var job = JobBuilder.Create<Work1Job>()
+                .WithIdentity(jobKey)
+                .Build();
+
+            var trigger = TriggerBuilder.Create()
+                .WithIdentity("Work1", "Work1")
+                .WithCronSchedule("0 0/5 * ? * * *") // A cada cinco minutos
+                .ForJob(jobKey)
+                .Build();
+
+            await scheduler.ScheduleJob(job, trigger);
         }
         else
         {
-            Console.WriteLine($"Job '{jobName}' in group '{groupName}' does not exist.");
+            // Se o job já existe, você pode decidir atualizar o trigger ou simplesmente logar que o job já está configurado
+            logger.LogInformation("Job already exists and is scheduled.");
         }
+
+        await StartSchedulerWithListener(host.Services);
+
+        Console.WriteLine("Pressione [Enter] para sair...");
+        Console.ReadLine();
+
+        await host.StopAsync();
     }
 
-    // Aqui está a definição do método CreateHostBuilder
-    private static IHostBuilder CreateHostBuilder(string[] args) =>
-    Host.CreateDefaultBuilder(args)
-        .ConfigureServices((hostContext, services) =>
-        {
-            services.AddSingleton<ISchedulerFactory, StdSchedulerFactory>(); // Registra o ISchedulerFactory padrão do Quartz
-            services.AddSingleton<IJobFactory, MyJobFactory>(); // Registra a sua implementação de IJobFactory
-            services.AddSingleton<ISchedulerService, SchedulerService>(); // Registra o seu serviço de agendador personalizado
-            // Registra os jobs como serviços para que a MyJobFactory possa criá-los.
-            services.AddTransient<MyJobFactory>(); // Substitua "YourJobClass" pela classe real do seu job.
-            // Outras configurações e serviços...
-        });
+    private static async Task StartSchedulerWithListener(IServiceProvider services)
+    {
+        var schedulerService = services.GetRequiredService<ISchedulerService>();
+        var scheduler = await schedulerService.GetScheduler();
 
+        // Adicionando o listener ao scheduler
+        var jobListener = new Work1JobListener();
+        scheduler.ListenerManager.AddJobListener(jobListener, EverythingMatcher<JobKey>.AllJobs());
+
+        await scheduler.Start();
+    }
 }

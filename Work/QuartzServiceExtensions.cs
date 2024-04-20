@@ -4,9 +4,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
-using System;
 
-namespace Work.Extensions
+namespace Work
 {
     public static class QuartzServiceExtensions
     {
@@ -32,7 +31,8 @@ namespace Work.Extensions
 
             // Configure o QuartzHostedService com opções apropriadas
             services.AddSingleton<ISchedulerService, SchedulerService>();
-            services.AddSingleton<IHostedService, QuartzHostedService>((serviceProvider) => {
+            services.AddSingleton<IHostedService, QuartzHostedService>((serviceProvider) =>
+            {
                 var lifetime = serviceProvider.GetRequiredService<IHostApplicationLifetime>();
                 var schedulerFactory = serviceProvider.GetRequiredService<ISchedulerFactory>();
                 var options = new QuartzHostedServiceOptions

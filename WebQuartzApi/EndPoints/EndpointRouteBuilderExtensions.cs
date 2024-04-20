@@ -26,12 +26,7 @@
                 .WithOpenApi()
                 .WithDescription("Obtém os trabalhos pausados.");
 
-            app.MapPost("/api/jobs", JobEndpoints.CreateJob)
-                .WithTags("Jobs")
-                .WithOpenApi()
-                .WithDescription("Cria um novo trabalho.");
-
-            app.MapPost("/api/jobs/start", JobEndpoints.ResumeJob)
+            app.MapPost("/api/jobs/start", JobEndpoints.StartJob)
                 .WithTags("Jobs")
                 .WithOpenApi()
                 .WithDescription("Inicia um trabalho.");

@@ -1,5 +1,4 @@
 ﻿using Dapper;
-using JobsQuatz.Jobs;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Quartz;
@@ -26,58 +25,41 @@ namespace WebQuartzApi.EndPoints
             var jobs = new List<JobRequest>();
             foreach (var jobKey in jobKeys)
             {
-                var detail = await scheduler.GetJobDetail(jobKey);
-                if (detail != null)
+                try
                 {
-                    var cronExpressionString = string.Empty;
-                    var jobTriggers = await scheduler.GetTriggersOfJob(jobKey);
-
-                    foreach (var trigger in jobTriggers)
+                    var detail = await scheduler.GetJobDetail(jobKey);
+                    if (detail != null)
                     {
-                        if (trigger is CronTriggerImpl cronTrigger)
+                        var cronExpressionString = string.Empty;
+                        var jobTriggers = await scheduler.GetTriggersOfJob(jobKey);
+
+                        foreach (var trigger in jobTriggers)
                         {
-                            cronExpressionString = cronTrigger.CronExpressionString;
-                            break;
+                            if (trigger is CronTriggerImpl cronTrigger)
+                            {
+                                cronExpressionString = cronTrigger.CronExpressionString;
+                                break;
+                            }
                         }
-                    }
 
-                    var jobDetailDto = new JobRequest
-                    {
-                        JobName = detail.Key.Name,
-                        GroupName = detail.Key.Group,
-                        Description = detail.Description,
-                        CronExpression = cronExpressionString
-                    };
-                    jobs.Add(jobDetailDto);
+                        jobs.Add(new JobRequest
+                        {
+                            JobName = detail.Key.Name,
+                            GroupName = detail.Key.Group,
+                            Description = detail.Description,
+                            CronExpression = cronExpressionString
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error retrieving job '{jobKey}': {ex.GetType().FullName}: {ex.Message}");
                 }
             }
             return Results.Ok(jobs);
         }
 
-        /// <summary>
-        /// metodo para criar um job
-        /// </summary>
-        /// <param name="context"></param>
-        /// <returns></returns>
-        public static async Task<IResult> CreateJob([FromServices] IScheduler scheduler, HttpContext context, JobRequest request)
-        {
-            if (request == null || string.IsNullOrWhiteSpace(request.JobName) || string.IsNullOrWhiteSpace(request.CronExpression))
-            {
-                return Results.BadRequest(new { Message = "Invalid job request data." });
-            }
 
-            var job = JobBuilder.Create<HttpJob>()
-                .WithIdentity(request.JobName, request.GroupName)
-                .WithDescription(request.Description)
-                .Build();
-            var trigger = TriggerBuilder.Create()
-                .WithIdentity($"{request.JobName}-trigger", request.GroupName)
-                .WithCronSchedule(request.CronExpression)
-                .Build();
-
-            await scheduler.ScheduleJob(job, trigger);
-            return Results.Ok(new { Message = "Job scheduled successfully." });
-        }
 
         /// <summary>
         /// metodo para deletar um job
@@ -102,37 +84,6 @@ namespace WebQuartzApi.EndPoints
             else
             {
                 return Results.NotFound(new { Message = "Job not found." });
-            }
-        }
-
-        /// <summary>
-        /// metodo para iniciar um job
-        /// </summary>
-        /// <param name="context"></param>
-        /// <returns></returns>
-        public static async Task<IResult> StartJob([FromServices] IScheduler scheduler, JobStartedRequest request)
-        {
-            if (string.IsNullOrWhiteSpace(request.JobName) || string.IsNullOrWhiteSpace(request.GroupName))
-            {
-                return Results.BadRequest(new { Message = "Job name or group name is not specified." });
-            }
-
-            var jobKey = new JobKey(request.JobName, request.GroupName);
-            // Aqui assumimos que você quer iniciar o job imediatamente.
-            try
-            {
-                await scheduler.TriggerJob(jobKey);
-                return Results.Ok(new { Message = "Job started successfully." });
-            }
-            catch (SchedulerException ex)
-            {
-                // Handle exceptions related to the scheduler
-                return Results.Problem(ex.Message);
-            }
-            catch (Exception ex)
-            {
-                // Handle all other exceptions
-                return Results.Problem(ex.Message);
             }
         }
 
@@ -296,17 +247,39 @@ namespace WebQuartzApi.EndPoints
             }
             return Results.Ok(runningJobs);
         }
-        public static async Task<IResult> ResumeJob([FromServices] IScheduler scheduler, JobStateRequest request)
+
+        /// <summary>
+        /// metodo para iniciar um job
+        /// </summary>
+        /// <param name="context"></param>
+        /// <returns></returns>
+        public static async Task<IResult> StartJob([FromServices] IScheduler scheduler, JobStartedRequest request)
         {
-            var jobKey = new JobKey(request.JobName, request.GroupName);
-            try
+            var jobKey = new JobKey(request.JobName, request.GroupName); // WorkerId representa a identificação única do work
+            var triggerKey = new TriggerKey($"{request.JobName}-trigger", request.GroupName);
+
+            if (!await scheduler.CheckExists(jobKey))
             {
-                await scheduler.ResumeJob(jobKey);
-                return Results.Ok(new { Message = "Job resumed successfully." });
+                return Results.BadRequest(new { Message = "Job does not exist." });
             }
-            catch (SchedulerException ex)
+
+            // Verifique o estado do trigger
+            var triggerState = await scheduler.GetTriggerState(triggerKey);
+            if (triggerState == TriggerState.Paused)
             {
-                return Results.Problem(ex.Message);
+                // Resume o job se estiver pausado
+                await scheduler.ResumeJob(jobKey);
+                return Results.Ok(new { Message = "Job resumed and will be triggered according to its schedule." });
+            }
+            else if (triggerState == TriggerState.Normal)
+            {
+                // Se o job estiver pronto para ser executado e não estiver bloqueado, dispare-o imediatamente
+                await scheduler.TriggerJob(jobKey);
+                return Results.Ok(new { Message = "Job triggered successfully." });
+            }
+            else
+            {
+                return Results.Conflict(new { Message = "Job is currently running, blocked, or in an unknown state." });
             }
         }
 
