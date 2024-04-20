@@ -13,6 +13,7 @@ namespace Work2
         {
             services.AddQuartz(q =>
             {
+                q.SchedulerId = "Scheduler-Work1";
                 q.UseMicrosoftDependencyInjectionJobFactory();
                 q.UseSimpleTypeLoader();
                 q.UsePersistentStore(store =>

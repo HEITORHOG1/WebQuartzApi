@@ -59,8 +59,6 @@ namespace WebQuartzApi.EndPoints
             return Results.Ok(jobs);
         }
 
-
-
         /// <summary>
         /// metodo para deletar um job
         /// </summary>
