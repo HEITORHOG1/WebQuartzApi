@@ -10,11 +10,22 @@ namespace Work
         private IScheduler _scheduler;
         private readonly IConfiguration _configuration;
         private readonly ISchedulerFactory _schedulerFactory;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly string _instanceName;
+        private readonly string _tablePrefix;
 
-        public SchedulerService(ISchedulerFactory schedulerFactory, IConfiguration configuration)
+        public SchedulerService(
+            ISchedulerFactory schedulerFactory,
+            IConfiguration configuration,
+            IServiceProvider serviceProvider,
+            string instanceName,
+            string tablePrefix)
         {
             _schedulerFactory = schedulerFactory;
             _configuration = configuration;
+            _serviceProvider = serviceProvider;
+            _instanceName = instanceName;
+            _tablePrefix = tablePrefix;
         }
 
         public async Task<IScheduler> GetScheduler()
@@ -31,21 +42,24 @@ namespace Work
             var props = new NameValueCollection
             {
                 ["quartz.serializer.type"] = _configuration["Quartz:SerializerType"],
-                ["quartz.scheduler.instanceName"] = _configuration["Quartz:InstanceName"],
-                ["quartz.threadPool.type"] = _configuration["Quartz:ThreadPoolType"],
-                ["quartz.threadPool.threadCount"] = _configuration["Quartz:ThreadPoolThreadCount"],
-                ["quartz.jobStore.type"] = _configuration["Quartz:JobStoreType"],
-                ["quartz.jobStore.driverDelegateType"] = _configuration["Quartz:DriverDelegateType"],
-                ["quartz.jobStore.tablePrefix"] = _configuration["Quartz:TablePrefix"],
-                ["quartz.jobStore.dataSource"] = _configuration["Quartz:DataSource"],
-                ["quartz.dataSource.myDS.connectionString"] = _configuration["Quartz:ConnectionString"],
-                ["quartz.dataSource.myDS.provider"] = _configuration["Quartz:DataSourceProvider"],
-                ["quartz.jobStore.useProperties"] = _configuration["Quartz:UseProperties"],
-                ["quartz.jobStore.performSchemaValidation"] = _configuration["Quartz:PerformSchemaValidation"]
+                ["quartz.scheduler.instanceName"] = _instanceName,
+                ["quartz.threadPool.type"] = _configuration["Quartz:quartz.threadPool.type"],
+                ["quartz.threadPool.threadCount"] = _configuration.GetValue<string>("Quartz:ThreadPoolThreadCount"), // Assuming it's stored as a string
+                ["quartz.jobStore.type"] = _configuration["Quartz:quartz.jobStore.type"],
+                ["quartz.jobStore.driverDelegateType"] = _configuration["Quartz:quartz.jobStore.driverDelegateType"],
+                ["quartz.jobStore.tablePrefix"] = _tablePrefix,
+                ["quartz.jobStore.dataSource"] = "myDS",
+                ["quartz.dataSource.myDS.connectionString"] = _configuration["Quartz:quartz.dataSource.myDS.connectionString"], // Corrected key
+                ["quartz.dataSource.myDS.provider"] = _configuration["Quartz:quartz.dataSource.myDS.provider"],
+                ["quartz.jobStore.useProperties"] = _configuration["Quartz:quartz.jobStore.useProperties"],
+                ["quartz.jobStore.performSchemaValidation"] = _configuration["Quartz:quartz.jobStore.performSchemaValidation"],
+                ["quartz.jobStore.clustered"] = _configuration["Quartz:quartz.jobStore.clustered"],
+                ["quartz.jobStore.clusterCheckinInterval"] = _configuration["Quartz:quartz.jobStore.clusterCheckinInterval"]
             };
 
             var factory = new StdSchedulerFactory(props);
             _scheduler = await factory.GetScheduler();
+            _scheduler.JobFactory = new DIJobWork1Factory(_serviceProvider);
             await _scheduler.Start();
         }
     }

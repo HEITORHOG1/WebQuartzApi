@@ -23,20 +23,25 @@ namespace Work
         /// <returns>Uma tarefa assíncrona representando a execução do job</returns>
         public async Task Execute(IJobExecutionContext context)
         {
-            // Supondo que você tenha acesso ao fuso horário de Brasília aqui.
-            var brasiliaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time");
-            var nextFireTimeUtc = context.Trigger.GetNextFireTimeUtc();
-            if (nextFireTimeUtc.HasValue)
+            try
             {
-                var nextExecutionTime = TimeZoneInfo.ConvertTimeFromUtc(nextFireTimeUtc.Value.DateTime, brasiliaTimeZone);
-                LogNextExecutionTime(context.JobDetail.Key.Name, nextExecutionTime);
+                var brasiliaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time");
+                var nextFireTimeUtc = context?.Trigger?.GetNextFireTimeUtc();
+                if (nextFireTimeUtc.HasValue)
+                {
+                    var nextExecutionTime = TimeZoneInfo.ConvertTimeFromUtc(nextFireTimeUtc.Value.DateTime, brasiliaTimeZone);
+                    LogNextExecutionTime(context.JobDetail.Key.Name, nextExecutionTime);
+                }
+
+                LogJobExecution();
+                _logger?.LogInformation("Job executado com sucesso");
             }
-
-            LogJobExecution();
-
-            _logger.LogInformation("Job executado com sucesso");
+            catch (Exception ex)
+            {
+                _logger?.LogError($"Error executing job: {ex.Message}", ex);
+                throw; // Consider re-throwing to let the scheduler know the job failed.
+            }
         }
-
         private void LogNextExecutionTime(string jobName, DateTime nextExecutionTime)
         {
             _logger.LogInformation($"Próxima execução do job {jobName}: {nextExecutionTime:dd/MM/yyyy HH:mm:ss}");

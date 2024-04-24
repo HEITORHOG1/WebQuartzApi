@@ -22,7 +22,6 @@ internal class Program
             {
                 configuration = hostContext.Configuration;
                 services.AddQuartzConfiguration(configuration);
-                services.AddSingleton<ISchedulerService, SchedulerService>();
                 services.AddLogging();
             })
             .Build();
@@ -36,7 +35,7 @@ internal class Program
         var schedulerService = host.Services.GetRequiredService<ISchedulerService>();
         var scheduler = await schedulerService.GetScheduler();
 
-        var jobKey = new JobKey("Work1", "Work1");
+        var jobKey = new JobKey("Work2", "Work2");
 
         // Verifica se o job já existe
         if (!await scheduler.CheckExists(jobKey))
@@ -46,7 +45,7 @@ internal class Program
                 .Build();
 
             var trigger = TriggerBuilder.Create()
-                .WithIdentity("Work1", "Work1")
+                .WithIdentity("Work2", "Work2")
                 .WithCronSchedule("0 0/5 * ? * * *") // A cada cinco minutos
                 .ForJob(jobKey)
                 .Build();
