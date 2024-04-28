@@ -3,11 +3,11 @@ using Quartz.Spi;
 
 namespace Work
 {
-    public class DIJobWork1Factory : IJobFactory
+    public class DIJobWorkFactory : IJobFactory
     {
         protected readonly IServiceProvider _serviceProvider;
 
-        public DIJobWork1Factory(IServiceProvider serviceProvider)
+        public DIJobWorkFactory(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
         }
@@ -18,7 +18,7 @@ namespace Work
             var job = (IJob)_serviceProvider.GetService(jobDetail.JobType);
             if (job == null)
             {
-                throw new InvalidOperationException($"Não foi possível resolver o job '{jobDetail.JobType}'.");
+                throw new InvalidOperationException($"Não foi possível resolver o job work '{jobDetail.JobType}'.");
             }
             return job;
         }

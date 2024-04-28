@@ -43,7 +43,6 @@ namespace Work2
             }
         }
 
-
         private void LogNextExecutionTime(string jobName, DateTime nextExecutionTime)
         {
             _logger.LogInformation($"Próxima execução do job {jobName}: {nextExecutionTime:dd/MM/yyyy HH:mm:ss}");

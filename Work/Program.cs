@@ -35,18 +35,19 @@ internal class Program
         var schedulerService = host.Services.GetRequiredService<ISchedulerService>();
         var scheduler = await schedulerService.GetScheduler();
 
-        var jobKey = new JobKey("Work1", "Work1");
+        var jobKey = new JobKey("Work", "Work");
 
         // Verifica se o job já existe
         if (!await scheduler.CheckExists(jobKey))
         {
-            var job = JobBuilder.Create<WorkJJob>()
+            var job = JobBuilder.Create<WorkJob>()
                 .WithIdentity(jobKey)
                 .Build();
 
             var trigger = TriggerBuilder.Create()
-                .WithIdentity("Work1", "Work1")
+                .WithIdentity("Work", "Work")
                 .WithCronSchedule("0 0/3 * ? * * *") // A cada três minutos
+                .WithDescription("Work job")
                 .ForJob(jobKey)
                 .Build();
 

@@ -3,15 +3,12 @@ using Quartz;
 
 namespace Work
 {
-    /// <summary>
-    /// Classe que representa um job HTTP
-    /// </summary>
     [DisallowConcurrentExecution]
-    public class WorkJJob : IJob
+    internal class WorkJob : IJob
     {
-        private readonly ILogger<WorkJJob> _logger;
+        private readonly ILogger<WorkJob> _logger;
 
-        public WorkJJob(ILogger<WorkJJob> logger)
+        public WorkJob(ILogger<WorkJob> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -34,7 +31,7 @@ namespace Work
                 }
 
                 LogJobExecution();
-                _logger?.LogInformation("Job executado com sucesso");
+                _logger?.LogInformation("Job work executado com sucesso");
             }
             catch (Exception ex)
             {
@@ -45,12 +42,12 @@ namespace Work
 
         private void LogNextExecutionTime(string jobName, DateTime nextExecutionTime)
         {
-            _logger.LogInformation($"Próxima execução do job {jobName}: {nextExecutionTime:dd/MM/yyyy HH:mm:ss}");
+            _logger.LogInformation($"Próxima execução do job work {jobName}: {nextExecutionTime:dd/MM/yyyy HH:mm:ss}");
         }
 
         private void LogJobExecution()
         {
-            _logger.LogInformation("Executando o job...");
+            _logger.LogInformation("Executando o job work...");
             _logger.LogInformation($"Data e hora atual: {DateTime.Now}");
         }
     }

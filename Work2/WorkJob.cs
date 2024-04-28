@@ -1,17 +1,14 @@
 ﻿using Microsoft.Extensions.Logging;
 using Quartz;
 
-namespace Work
+namespace Work2
 {
-    /// <summary>
-    /// Classe que representa um job HTTP
-    /// </summary>
     [DisallowConcurrentExecution]
-    public class WorkJJob : IJob
+    internal class WorkJob : IJob
     {
-        private readonly ILogger<WorkJJob> _logger;
+        private readonly ILogger<WorkJob> _logger;
 
-        public WorkJJob(ILogger<WorkJJob> logger)
+        public WorkJob(ILogger<WorkJob> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -34,23 +31,23 @@ namespace Work
                 }
 
                 LogJobExecution();
-                _logger?.LogInformation("Job executado com sucesso");
+                _logger?.LogInformation("Job work2  executado com sucesso");
             }
             catch (Exception ex)
             {
-                _logger?.LogError($"Error executing job: {ex.Message}", ex);
+                _logger?.LogError($"Error executing job work2 : {ex.Message}", ex);
                 throw; // Consider re-throwing to let the scheduler know the job failed.
             }
         }
 
         private void LogNextExecutionTime(string jobName, DateTime nextExecutionTime)
         {
-            _logger.LogInformation($"Próxima execução do job {jobName}: {nextExecutionTime:dd/MM/yyyy HH:mm:ss}");
+            _logger.LogInformation($"Próxima execução do job work2  {jobName}: {nextExecutionTime:dd/MM/yyyy HH:mm:ss}");
         }
 
         private void LogJobExecution()
         {
-            _logger.LogInformation("Executando o job...");
+            _logger.LogInformation("Executando o job work2 ...");
             _logger.LogInformation($"Data e hora atual: {DateTime.Now}");
         }
     }

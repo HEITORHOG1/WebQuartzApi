@@ -14,7 +14,7 @@ namespace Work
         {
             services.AddQuartz(q =>
             {
-                q.SchedulerId = "Scheduler-Work1";
+                q.SchedulerId = "Scheduler-Work";
                 q.UseMicrosoftDependencyInjectionJobFactory();
                 q.UseSimpleTypeLoader();
                 q.UsePersistentStore(store =>
@@ -30,15 +30,15 @@ namespace Work
                 });
                 q.UseDefaultThreadPool(tp => tp.MaxConcurrency = configuration.GetValue<int>("Quartz:quartz.threadPool.threadCount"));
             });
-            services.AddSingleton<IJobFactory, DIJobWork1Factory>();
-            services.AddTransient<WorkJJob>();
-            services.AddSingleton<IJobFactory>(provider => new DIJobWork1Factory(provider));
+            services.AddSingleton<IJobFactory, DIJobWorkFactory>();
+            services.AddTransient<WorkJob>();
+            services.AddSingleton<IJobFactory>(provider => new DIJobWorkFactory(provider));
             services.AddSingleton<ISchedulerService>(provider =>
             {
                 var config = provider.GetRequiredService<IConfiguration>();
                 var schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();
                 var serviceProvider = provider; // Directly use 'provider' which is IServiceProvider
-                var instanceName = "Scheduler-Work1"; // Custom instance name
+                var instanceName = "Scheduler-Work"; // Custom instance name
                 var tablePrefix = "QRTZ_"; // Custom table prefix
                 return new SchedulerService(schedulerFactory, config, serviceProvider, instanceName, tablePrefix);
             });

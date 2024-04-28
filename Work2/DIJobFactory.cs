@@ -18,11 +18,10 @@ namespace Work2
             var job = (IJob)_serviceProvider.GetService(jobDetail.JobType);
             if (job == null)
             {
-                throw new InvalidOperationException($"Não foi possível resolver o job '{jobDetail.JobType}'.");
+                throw new InvalidOperationException($"Não foi possível resolver o job work2 '{jobDetail.JobType}'.");
             }
             return job;
         }
-
 
         public void ReturnJob(IJob job)
         {

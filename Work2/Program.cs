@@ -40,7 +40,7 @@ internal class Program
         // Verifica se o job já existe
         if (!await scheduler.CheckExists(jobKey))
         {
-            var job = JobBuilder.Create<Work1Job>()
+            var job = JobBuilder.Create<WorkJob>()
                 .WithIdentity(jobKey)
                 .Build();
 

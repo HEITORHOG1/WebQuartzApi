@@ -1,87 +1,74 @@
 ﻿using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
-using Quartz;
-using Quartz.Impl.Matchers;
-using Quartz.Impl.Triggers;
 using System.Data;
-using WebQuartzApi.Model;
+using WebQuartzApi.Model.Request;
+using WebQuartzApi.Model.Response;
 
 namespace WebQuartzApi.EndPoints
 {
     /// <summary>
     /// metodos para definição dos endpoints de jobs
     /// </summary>
-    public static class JobEndpoints
+    public class JobEndpoints
     {
+        private readonly ILogger<JobEndpoints> _logger;
+
+        public JobEndpoints(ILogger<JobEndpoints> logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>
         /// metodo para obter os jobs
         /// </summary>
         /// <param name="context"></param>
         /// <returns></returns>
-        public static async Task<IResult> GetJobs([FromServices] IScheduler scheduler)
+        public async Task<IEnumerable<GetJobsResponse>> GetJobs()
         {
-            var jobKeys = await scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup());
-            var jobs = new List<JobRequest>();
-            foreach (var jobKey in jobKeys)
+            _logger.LogInformation("Obtendo todos os jobs");
+            try
             {
-                try
+                using (var connection = GetDbConnection())
                 {
-                    var detail = await scheduler.GetJobDetail(jobKey);
-                    if (detail != null)
-                    {
-                        var cronExpressionString = string.Empty;
-                        var jobTriggers = await scheduler.GetTriggersOfJob(jobKey);
-
-                        foreach (var trigger in jobTriggers)
-                        {
-                            if (trigger is CronTriggerImpl cronTrigger)
-                            {
-                                cronExpressionString = cronTrigger.CronExpressionString;
-                                break;
-                            }
-                        }
-
-                        jobs.Add(new JobRequest
-                        {
-                            JobName = detail.Key.Name,
-                            GroupName = detail.Key.Group,
-                            Description = detail.Description,
-                            CronExpression = cronExpressionString
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error retrieving job '{jobKey}': {ex.GetType().FullName}: {ex.Message}");
+                    var jobs = await connection.QueryAsync<GetJobsResponse>(@"SELECT SCHED_NAME, JOB_NAME, JOB_GROUP, DESCRIPTION, JOB_CLASS_NAME, IS_DURABLE, IS_NONCONCURRENT, IS_UPDATE_DATA, REQUESTS_RECOVERY FROM [dbo].[QRTZ_JOB_DETAILS]");
+                    _logger.LogInformation($"Encontrados {jobs.Count()} jobs");
+                    return jobs;
                 }
             }
-            return Results.Ok(jobs);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ocorreu um erro ao obter todos os jobs");
+                throw;
+            }
         }
 
-        /// <summary>
-        /// metodo para deletar um job
-        /// </summary>
-        /// <param name="context"></param>
-        /// <returns></returns>
-        public static async Task<IResult> DeleteJob([FromServices] IScheduler scheduler, HttpContext context)
+        public async Task<GetJobDetailResponse> GetJobDetail([FromBody] GetJobDetailRequest request)
         {
-            var jobName = context.Request.RouteValues["jobName"]?.ToString();
-            var groupName = context.Request.RouteValues["groupName"]?.ToString();
-            if (string.IsNullOrWhiteSpace(jobName) || string.IsNullOrWhiteSpace(groupName))
+            _logger.LogInformation($"Obtendo detalhes do job {request.JobName} no grupo {request.GroupName}");
+            try
             {
-                return Results.BadRequest(new { Message = "Job name or group name is not specified." });
+                using (var connection = GetDbConnection())
+                {
+                    var sql = @"SELECT SCHED_NAME, JOB_NAME, JOB_GROUP, DESCRIPTION, JOB_CLASS_NAME, IS_DURABLE, IS_NONCONCURRENT, IS_UPDATE_DATA, REQUESTS_RECOVERY, JOB_DATA FROM [dbo].[QRTZ_JOB_DETAILS] WHERE JOB_NAME = @JobName AND JOB_GROUP = @JobGroup";
+                    var parameters = new { JobName = request.JobName, JobGroup = request.GroupName };
+                    var job = await connection.QuerySingleOrDefaultAsync<GetJobDetailResponse>(sql, parameters);
+                    if (job != null)
+                    {
+                        _logger.LogInformation($"Job {request.JobName} no grupo {request.GroupName} encontrado");
+                        return job;
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Job {request.JobName} no grupo {request.GroupName} não encontrado");
+                        return null;
+                    }
+                }
             }
-
-            var jobKey = new JobKey(jobName, groupName);
-            var result = await scheduler.DeleteJob(jobKey);
-            if (result)
+            catch (Exception ex)
             {
-                return Results.Ok(new { Message = "Job deleted successfully." });
-            }
-            else
-            {
-                return Results.NotFound(new { Message = "Job not found." });
+                _logger.LogError(ex, $"Ocorreu um erro ao obter o job {request.JobName} no grupo {request.GroupName}");
+                throw;
             }
         }
 
@@ -91,22 +78,32 @@ namespace WebQuartzApi.EndPoints
         /// <param name="scheduler">O agendador do Quartz.</param>
         /// <param name="request">Os dados do job que está sendo pausado.</param>
         /// <returns>Um resultado da ação de pausar o job.</returns>
-        public static async Task<IResult> PauseJob([FromServices] IScheduler scheduler, JobPausedRequest request)
+        public async Task<PauseJobResponse> PauseJob([FromBody] PauseJobRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.JobName) || string.IsNullOrWhiteSpace(request.GroupName))
-            {
-                return Results.BadRequest(new { Message = "Job name or group name is not specified." });
-            }
-
-            var jobKey = new JobKey(request.JobName, request.GroupName);
+            _logger.LogInformation($"Pausando job {request.TriggerName} no grupo {request.GroupName}");
             try
             {
-                await scheduler.PauseJob(jobKey);
-                return Results.Ok(new { Message = "Job paused successfully." });
+                using (var connection = GetDbConnection())
+                {
+                    var sql = "UPDATE [dbo].[QRTZ_TRIGGERS] SET TRIGGER_STATE = 'PAUSED' WHERE TRIGGER_NAME = @TriggerName AND TRIGGER_GROUP = @TriggerGroup";
+                    var parameters = new { TriggerName = request.TriggerName, TriggerGroup = request.GroupName };
+                    var result = await connection.ExecuteAsync(sql, parameters);
+                    if (result > 0)
+                    {
+                        _logger.LogInformation($"Job {request.TriggerName} no grupo {request.GroupName} pausado com sucesso");
+                        return new PauseJobResponse { IsPaused = true };
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Job {request.TriggerName} no grupo {request.GroupName} não encontrado");
+                        return new PauseJobResponse { IsPaused = false };
+                    }
+                }
             }
-            catch (SchedulerException ex)
+            catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                _logger.LogError(ex, $"Ocorreu um erro ao pausar o job {request.TriggerName} no grupo {request.GroupName}");
+                throw;
             }
         }
 
@@ -116,22 +113,32 @@ namespace WebQuartzApi.EndPoints
         /// <param name="scheduler"></param>
         /// <param name="request"></param>
         /// <returns></returns>
-        public static async Task<IResult> WaitingJob([FromServices] IScheduler scheduler, JobResumedRequest request)
+        public async Task<WaitingJobResponse> WaitingJob([FromBody] WaitingJobRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.JobName) || string.IsNullOrWhiteSpace(request.GroupName))
-            {
-                return Results.BadRequest(new { Message = "Job name or group name is not specified." });
-            }
-
-            var jobKey = new JobKey(request.JobName, request.GroupName);
+            _logger.LogInformation($"Colocando job {request.TriggerName} no grupo {request.GroupName} em espera");
             try
             {
-                await scheduler.ResumeJob(jobKey);
-                return Results.Ok(new { Message = "Job resumed successfully." });
+                using (var connection = GetDbConnection())
+                {
+                    var sql = "UPDATE [dbo].[QRTZ_TRIGGERS] SET TRIGGER_STATE = 'WAITING' WHERE TRIGGER_NAME = @TriggerName AND TRIGGER_GROUP = @TriggerGroup";
+                    var parameters = new { TriggerName = request.TriggerName, TriggerGroup = request.GroupName };
+                    var result = await connection.ExecuteAsync(sql, parameters);
+                    if (result > 0)
+                    {
+                        _logger.LogInformation($"Job {request.TriggerName} no grupo {request.GroupName} colocado em espera com sucesso");
+                        return new WaitingJobResponse { IsWaiting = true };
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Job {request.TriggerName} no grupo {request.GroupName} não encontrado");
+                        return new WaitingJobResponse { IsWaiting = false };
+                    }
+                }
             }
-            catch (SchedulerException ex)
+            catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                _logger.LogError(ex, $"Ocorreu um erro ao colocar o job {request.TriggerName} no grupo {request.GroupName} em espera");
+                throw;
             }
         }
 
@@ -140,41 +147,23 @@ namespace WebQuartzApi.EndPoints
         /// </summary>
         /// <param name="scheduler"></param>
         /// <returns></returns>
-        public static async Task<IResult> GetPausedJobs([FromServices] IScheduler scheduler)
+        public async Task<IEnumerable<GetPausedJobsResponse>> GetPausedJobs()
         {
-            var pausedJobKeys = await scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup());
-            var pausedJobs = new List<JobRequest>();
-            foreach (var jobKey in pausedJobKeys)
+            _logger.LogInformation("Obtendo todos os jobs pausados");
+            try
             {
-                var jobDetail = await scheduler.GetJobDetail(jobKey);
-                var jobTriggers = await scheduler.GetTriggersOfJob(jobKey);
-                var isJobPaused = jobTriggers.Any(trigger => trigger.GetNextFireTimeUtc() == null);
-
-                if (isJobPaused)
+                using (var connection = GetDbConnection())
                 {
-                    var jobDataMap = jobDetail.JobDataMap;
-                    var cronExpressionString = string.Empty;
-
-                    foreach (var trigger in jobTriggers)
-                    {
-                        if (trigger is CronTriggerImpl cronTrigger)
-                        {
-                            cronExpressionString = cronTrigger.CronExpressionString;
-                            break;
-                        }
-                    }
-
-                    var pausedJob = new JobRequest
-                    {
-                        JobName = jobDetail.Key.Name,
-                        GroupName = jobDetail.Key.Group,
-                        Description = jobDetail.Description,
-                        CronExpression = cronExpressionString
-                    };
-                    pausedJobs.Add(pausedJob);
+                    var jobs = await connection.QueryAsync<GetPausedJobsResponse>(@"SELECT SCHED_NAME, TRIGGER_NAME, TRIGGER_GROUP, JOB_NAME, JOB_GROUP, TRIGGER_STATE FROM [dbo].[QRTZ_TRIGGERS] WHERE TRIGGER_STATE = 'PAUSED'");
+                    _logger.LogInformation($"Encontrados {jobs.Count()} jobs pausados");
+                    return jobs;
                 }
             }
-            return Results.Ok(pausedJobs);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ocorreu um erro ao obter todos os jobs pausados");
+                throw;
+            }
         }
 
         /// <summary>
@@ -183,22 +172,32 @@ namespace WebQuartzApi.EndPoints
         /// <param name="scheduler"></param>
         /// <param name="request"></param>
         /// <returns></returns>
-        public static async Task<IResult> StopJob([FromServices] IScheduler scheduler, JobStoppedRequest request)
+        public async Task<StopJobResponse> StopJob([FromBody] StopJobRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.JobName) || string.IsNullOrWhiteSpace(request.GroupName))
-            {
-                return Results.BadRequest(new { Message = "Job name or group name is not specified." });
-            }
-
-            var jobKey = new JobKey(request.JobName, request.GroupName);
+            _logger.LogInformation($"Parando job {request.TriggerName} no grupo {request.GroupName}");
             try
             {
-                await scheduler.Interrupt(jobKey);
-                return Results.Ok(new { Message = "Job stopped successfully." });
+                using (var connection = GetDbConnection())
+                {
+                    var sql = "UPDATE [dbo].[QRTZ_TRIGGERS] SET TRIGGER_STATE = 'COMPLETE' WHERE TRIGGER_NAME = @TriggerName AND TRIGGER_GROUP = @TriggerGroup";
+                    var parameters = new { TriggerName = request.TriggerName, TriggerGroup = request.GroupName };
+                    var result = await connection.ExecuteAsync(sql, parameters);
+                    if (result > 0)
+                    {
+                        _logger.LogInformation($"Job {request.TriggerName} no grupo {request.GroupName} parado com sucesso");
+                        return new StopJobResponse { IsStopped = true };
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Job {request.TriggerName} no grupo {request.GroupName} não encontrado");
+                        return new StopJobResponse { IsStopped = false };
+                    }
+                }
             }
-            catch (SchedulerException ex)
+            catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                _logger.LogError(ex, $"Ocorreu um erro ao parar o job {request.TriggerName} no grupo {request.GroupName}");
+                throw;
             }
         }
 
@@ -207,43 +206,23 @@ namespace WebQuartzApi.EndPoints
         /// </summary>
         /// <param name="scheduler"></param>
         /// <returns></returns>
-        public static async Task<IResult> GetRunningJobs([FromServices] IScheduler scheduler)
+        public async Task<IEnumerable<GetRunningJobsResponse>> GetRunningJobs()
         {
-            var runningJobs = new List<JobRequest>();
-            var jobGroups = await scheduler.GetJobGroupNames();
-            foreach (var group in jobGroups)
+            _logger.LogInformation("Obtendo todos os jobs em execução");
+            try
             {
-                var jobKeys = await scheduler.GetJobKeys(GroupMatcher<JobKey>.GroupEquals(group));
-                foreach (var jobKey in jobKeys)
+                using (var connection = GetDbConnection())
                 {
-                    var jobDetail = await scheduler.GetJobDetail(jobKey);
-                    var jobTriggers = await scheduler.GetTriggersOfJob(jobKey);
-                    var isJobRunning = jobTriggers.Any(trigger => trigger.GetNextFireTimeUtc() != null);
-                    var cronExpressionString = string.Empty;
-
-                    foreach (var trigger in jobTriggers)
-                    {
-                        if (trigger is CronTriggerImpl cronTrigger)
-                        {
-                            cronExpressionString = cronTrigger.CronExpressionString;
-                            break;
-                        }
-                    }
-
-                    if (isJobRunning)
-                    {
-                        var runningJob = new JobRequest
-                        {
-                            JobName = jobDetail.Key.Name,
-                            GroupName = jobDetail.Key.Group,
-                            Description = jobDetail.Description,
-                            CronExpression = cronExpressionString
-                        };
-                        runningJobs.Add(runningJob);
-                    }
+                    var jobs = await connection.QueryAsync<GetRunningJobsResponse>(@"SELECT SCHED_NAME, TRIGGER_NAME, TRIGGER_GROUP, JOB_NAME, JOB_GROUP, TRIGGER_STATE FROM [dbo].[QRTZ_TRIGGERS] WHERE TRIGGER_STATE = 'WAITING'");
+                    _logger.LogInformation($"Encontrados {jobs.Count()} jobs em execução");
+                    return jobs;
                 }
             }
-            return Results.Ok(runningJobs);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ocorreu um erro ao obter todos os jobs em execução");
+                throw;
+            }
         }
 
         /// <summary>
@@ -251,44 +230,140 @@ namespace WebQuartzApi.EndPoints
         /// </summary>
         /// <param name="context"></param>
         /// <returns></returns>
-        public static async Task<IResult> StartJob([FromServices] IScheduler scheduler, JobStartedRequest request)
+        public async Task<StartJobResponse> StartJob([FromBody] StartJobRequest request)
         {
-            var jobKey = new JobKey(request.JobName, request.GroupName); // WorkerId representa a identificação única do work
-            var triggerKey = new TriggerKey($"{request.JobName}-trigger", request.GroupName);
-
-            if (!await scheduler.CheckExists(jobKey))
+            _logger.LogInformation($"Iniciando job {request.TriggerName} no grupo {request.GroupName}");
+            try
             {
-                return Results.BadRequest(new { Message = "Job does not exist." });
+                using (var connection = GetDbConnection())
+                {
+                    var sql = "UPDATE [dbo].[QRTZ_TRIGGERS] SET TRIGGER_STATE = 'EXECUTING' WHERE TRIGGER_NAME = @TriggerName AND TRIGGER_GROUP = @TriggerGroup";
+                    var parameters = new { TriggerName = request.TriggerName, TriggerGroup = request.GroupName };
+                    var result = await connection.ExecuteAsync(sql, parameters);
+                    if (result > 0)
+                    {
+                        _logger.LogInformation($"Job {request.TriggerName} no grupo {request.GroupName} iniciado com sucesso");
+                        return new StartJobResponse { IsStarted = true };
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Job {request.TriggerName} no grupo {request.GroupName} não encontrado");
+                        return new StartJobResponse { IsStarted = false };
+                    }
+                }
             }
-
-            // Verifique o estado do trigger
-            var triggerState = await scheduler.GetTriggerState(triggerKey);
-            if (triggerState == TriggerState.Paused)
+            catch (Exception ex)
             {
-                // Resume o job se estiver pausado
-                await scheduler.ResumeJob(jobKey);
-                return Results.Ok(new { Message = "Job resumed and will be triggered according to its schedule." });
-            }
-            else if (triggerState == TriggerState.Normal)
-            {
-                // Se o job estiver pronto para ser executado e não estiver bloqueado, dispare-o imediatamente
-                await scheduler.TriggerJob(jobKey);
-                return Results.Ok(new { Message = "Job triggered successfully." });
-            }
-            else
-            {
-                return Results.Conflict(new { Message = "Job is currently running, blocked, or in an unknown state." });
+                _logger.LogError(ex, $"Ocorreu um erro ao iniciar o job {request.TriggerName} no grupo {request.GroupName}");
+                throw;
             }
         }
 
-        private static async Task<string> GetCronExpressionFromDatabase(string jobName, string groupName)
+        public async Task<ResumeJobResponse> ResumeJob([FromBody] ResumeJobRequest request)
         {
-            using (var dbConnection = GetDbConnection())
+            _logger.LogInformation($"Resumindo job {request.TriggerName} no grupo {request.GroupName}");
+            try
             {
-                var sql = "SELECT CRON_EXPRESSION FROM QRTZ_CRON_TRIGGERS WHERE TRIGGER_NAME = @TriggerName AND TRIGGER_GROUP = @TriggerGroup";
-                var parameters = new { TriggerName = jobName, TriggerGroup = groupName };
-                var cronExpression = await dbConnection.QueryFirstOrDefaultAsync<string>(sql, parameters);
-                return cronExpression;
+                using (var connection = GetDbConnection())
+                {
+                    var sql = "UPDATE [dbo].[QRTZ_TRIGGERS] SET TRIGGER_STATE = 'WAITING' WHERE TRIGGER_NAME = @TriggerName AND TRIGGER_GROUP = @TriggerGroup";
+                    var parameters = new { TriggerName = request.TriggerName, TriggerGroup = request.GroupName };
+                    var result = await connection.ExecuteAsync(sql, parameters);
+                    if (result > 0)
+                    {
+                        _logger.LogInformation($"Job {request.TriggerName} no grupo {request.GroupName} retomado com sucesso");
+                        return new ResumeJobResponse { IsResumed = true };
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Job {request.TriggerName} no grupo {request.GroupName} não encontrado");
+                        return new ResumeJobResponse { IsResumed = false };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ocorreu um erro ao retomar o job {request.TriggerName} no grupo {request.GroupName}");
+                throw;
+            }
+        }
+
+        public async Task<CheckExistsResponse> CheckExists([FromBody] CheckExistsRequest request)
+        {
+            _logger.LogInformation($"Verificando se o job {request.JobName} no grupo {request.GroupName} existe");
+            try
+            {
+                using (var connection = GetDbConnection())
+                {
+                    var sql = "SELECT COUNT(*) FROM [dbo].[QRTZ_JOB_DETAILS] WHERE JOB_NAME = @JobName AND JOB_GROUP = @JobGroup";
+                    var parameters = new { JobName = request.JobName, JobGroup = request.GroupName };
+                    var count = await connection.ExecuteScalarAsync<int>(sql, parameters);
+                    if (count > 0)
+                    {
+                        _logger.LogInformation($"Job {request.JobName} no grupo {request.GroupName} existe");
+                        return new CheckExistsResponse { Exists = true };
+                    }
+                    else
+                    {
+                        _logger.LogInformation($"Job {request.JobName} no grupo {request.GroupName} não existe");
+                        return new CheckExistsResponse { Exists = false };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ocorreu um erro ao verificar se o job {request.JobName} no grupo {request.GroupName} existe");
+                throw;
+            }
+        }
+
+        public async Task<DeleteJobResponse> DeleteJob([FromBody] DeleteJobRequest request)
+        {
+            _logger.LogInformation($"Deletando job {request.JobName} no grupo {request.GroupName}");
+            try
+            {
+                using (var connection = GetDbConnection())
+                {
+                    var sql = "DELETE FROM [dbo].[QRTZ_JOB_DETAILS] WHERE JOB_NAME = @JobName AND JOB_GROUP = @JobGroup";
+                    var parameters = new { JobName = request.JobName, JobGroup = request.GroupName };
+                    var result = await connection.ExecuteAsync(sql, parameters);
+                    if (result > 0)
+                    {
+                        _logger.LogInformation($"Job {request.JobName} no grupo {request.GroupName} deletado com sucesso");
+                        return new DeleteJobResponse { IsDeleted = true };
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Job {request.JobName} no grupo {request.GroupName} não encontrado");
+                        return new DeleteJobResponse { IsDeleted = false };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ocorreu um erro ao deletar o job {request.JobName} no grupo {request.GroupName}");
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<GetTriggersOfJobResponse>> GetTriggersOfJob([FromBody] GetTriggersOfJobRequest request)
+        {
+            _logger.LogInformation($"Obtendo triggers do job {request.JobName} no grupo {request.GroupName}");
+            try
+            {
+                using (var connection = GetDbConnection())
+                {
+                    var sql = @"SELECT TRIGGER_NAME, TRIGGER_GROUP, TRIGGER_STATE FROM [dbo].[QRTZ_TRIGGERS] WHERE JOB_NAME = @JobName AND JOB_GROUP = @JobGroup";
+                    var parameters = new { JobName = request.JobName, JobGroup = request.GroupName };
+                    var triggers = await connection.QueryAsync<GetTriggersOfJobResponse>(sql, parameters);
+                    _logger.LogInformation($"Encontrados {triggers.Count()} triggers para o job {request.JobName} no grupo {request.GroupName}");
+                    return triggers;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ocorreu um erro ao obter os triggers do job {request.JobName} no grupo {request.GroupName}");
+                throw;
             }
         }
 

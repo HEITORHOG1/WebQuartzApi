@@ -31,7 +31,7 @@ namespace Work2
                 q.UseDefaultThreadPool(tp => tp.MaxConcurrency = configuration.GetValue<int>("Quartz:quartz.threadPool.threadCount"));
             });
             services.AddSingleton<IJobFactory, DIJobFactory>();
-            services.AddTransient<Work2.Work1Job>();
+            services.AddTransient<WorkJob>();
             services.AddSingleton<IJobFactory>(provider => new DIJobFactory(provider));
             services.AddSingleton<ISchedulerService>(provider =>
             {
@@ -42,7 +42,7 @@ namespace Work2
                 var tablePrefix = "QRTZ_"; // Custom table prefix
                 return new SchedulerService(schedulerFactory, config, serviceProvider, instanceName, tablePrefix);
             });
-            
+
             services.AddSingleton<IHostedService, QuartzHostedService>((serviceProvider) =>
             {
                 var lifetime = serviceProvider.GetRequiredService<IHostApplicationLifetime>();

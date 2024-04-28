@@ -1,6 +1,6 @@
-﻿namespace WebQuartzApi.Model
+﻿namespace WebQuartzApi.Model.Request
 {
-    public class JobResumedRequest
+    public class GetJobDetailRequest
     {
         public string JobName { get; set; }
         public string GroupName { get; set; }

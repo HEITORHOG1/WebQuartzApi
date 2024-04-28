@@ -59,7 +59,7 @@ namespace Work
 
             var factory = new StdSchedulerFactory(props);
             _scheduler = await factory.GetScheduler();
-            _scheduler.JobFactory = new DIJobWork1Factory(_serviceProvider);
+            _scheduler.JobFactory = new DIJobWorkFactory(_serviceProvider);
             await _scheduler.Start();
         }
     }
